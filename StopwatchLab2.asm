@@ -2,7 +2,7 @@
 ; StopwatchLab2.asm
 ;
 ; Created: 9/12/2023 7:02:54 PM
-; Authors : Trey Vokoun, Zach Ramsey
+; Author : Trey Vokoun & Zach Ramsey
 ;
 
 .include "m328Pdef.inc" ; tells what microcontroller we have and what instructions it takes
@@ -37,19 +37,94 @@ sbi DDRB,2			; Board O/P: PB2 -> ShiftReg I/P: SRCLK
 cbi DDRD,6			; Pushbutton A -> Board I/P: PD6
 cbi DDRD,7			; Pushbutton B -> Board I/P: PD7
 
+; Configure custom state register
+
+;---------Usage----------
+; Set State
+; sbi Control_Reg, (state mask)
+
+; Clear State
+; cbr Control_Reg, (state mask)
+
+; Read State
+; sbrc CustomStateReg, (reg bit #)  ; Skip if bit is clear (not set)
+; Code for State A
+;------------------------
+
+.def Control_Reg = R2				; custom state values stored in R2
+
+; state masks
+.equ Button_Released = 0b00000001	; bit 0 represents if button has been released (0:pressed | 1:released)
+.equ Increment_Mode = 0b00000010	; bit 1 represents current increment mode (0:1s | 1:10s)
+
+;------------------------
 
 ; begin main loop
 start:
 	ldi R16, hex0	; initially load 0 to display
- 
-	SBIS PIND,6		; Skip next instruction if Pin6 is set
- 	ldi R16, hex7	; Load pattern if pushbutton A is pressed
 
-	SBIS PIND,7		; Skip next instruction if PIN7 is set
-	ldi R16, hexe	; Load pattern if pushbutton B is pressed
+	SBIS PIND,6		; Skip next if A is 1
+	rcall Press_A	; call Press_A
+
+	SBIS PIND,7		; Skip next if B is 1
+	rcall Press_B	; call Press_B
 
 	rcall display	; call display subroutine
 rjmp start
+
+
+; handle pushbutton A press down
+Press_A:
+	ret				; return
+
+; handle pushbutton B press down
+Press_B:
+	rcall check_release_1s		; check if released under 1 second
+	BRTS Reset_Counter			; if T flag set -> branch to Reset_Counter
+
+	rcall check_release_1s		; check if released between 1 & 2 seconds
+	BRTS Toggle_Incr_Mode		; branch to Reset_Counter if T set
+
+	rcall check_release_1s		; check if released over 2 seconds
+	BRTS Clear_Count_Overflow	; branch to Reset_Counter if T set
+
+; reset counter to 0
+; TODO: implement stop condition check and reset
+Reset_Counter:
+	ret				; return
+
+; toggle increment mode between 1s & 10s
+; TODO: implement mode change functionality
+Toggle_Incr_Mode:
+	ret				; return
+
+; clear counter overflow condition ("-")
+; TODO: implement check for overflow and reset
+Clear_Count_Overflow:
+	ret				; return
+
+
+; check if button pushed within 1 s of call
+.equ count1 = 0xFA00	; assign hex val for outer loop decrement (64000)
+.equ count2 = 0xFA		; assign hex val for inner loop decrement (250)
+check_release_1s:
+	ldi r25, low(count1)	; load count1 into outer loop counter (r26:r25)
+	ldi r26, high(count1)
+D1:
+	sbic PIND,7		; skip next if B is 0
+	rjmp Release_B	; jump to Release_B
+
+	ldi r24, count2 ; load count2 into inner loop counter (r24
+D2:
+	dec r24			; r24 <-- r24 - 1
+	brne D2			; branch to D2 if result is not "0"
+	sbiw r26:r25, 1 ; r26:r25 <-- r26:r25 - 1
+	brne D1			; branch to D1 if result is not "0"
+	ret				; return
+
+Release_B:
+	set				; set T flag in sreg (TODO: need to change to use custom state register)
+	ret				; return early
 
 
 ; subroutine for displaying digit
