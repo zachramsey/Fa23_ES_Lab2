@@ -10,23 +10,23 @@
 .org 0
 
 ; Hex Digit encoding
-.equ hex0 = 0x3F	; Hex code for 0
-.equ hex1 = 0x30	; Hex code for 1
-.equ hex2 = 0x5B	; Hex code for 2
-.equ hex3 = 0x4F	; Hex code for 3
-.equ hex4 = 0x66	; Hex code for 4
-.equ hex5 = 0x6D	; Hex code for 5
-.equ hex6 = 0x7D	; Hex code for 6
-.equ hex7 = 0x07	; Hex code for 7
-.equ hex8 = 0x7F	; Hex code for 8
-.equ hex9 = 0x67	; Hex code for 9
-.equ hexa = 0x77	; Hex code for a
-.equ hexb = 0x7C	; Hex code for b
-.equ hexc = 0x39	; Hex code for c
-.equ hexd = 0x5E	; Hex code for d
-.equ hexe = 0x79	; Hex code for e
-.equ hexf = 0x71	; Hex code for f
-
+.equ hex0 = 0x3F		; Hex code for "0"
+.equ hex1 = 0x30		; Hex code for "1"
+.equ hex2 = 0x5B		; Hex code for "2"
+.equ hex3 = 0x4F		; Hex code for "3"
+.equ hex4 = 0x66		; Hex code for "4"
+.equ hex5 = 0x6D		; Hex code for "5"
+.equ hex6 = 0x7D		; Hex code for "6"
+.equ hex7 = 0x07		; Hex code for "7"
+.equ hex8 = 0x7F		; Hex code for "8"
+.equ hex9 = 0x67		; Hex code for "9"
+.equ hexa = 0x77		; Hex code for "A"
+.equ hexb = 0x7C		; Hex code for "b"
+.equ hexc = 0x39		; Hex code for "C"
+.equ hexd = 0x5E		; Hex code for "d"
+.equ hexe = 0x79		; Hex code for "E"
+.equ hexf = 0x71		; Hex code for "F"
+.equ hexovrflw = 0x40	; Hex code for "-"
 
 ; Configure I/O lines as output to shiftreg SN74HC595
 sbi DDRB,0			; Board O/P: PB0 -> ShiftReg I/P: SER
@@ -37,9 +37,17 @@ sbi DDRB,2			; Board O/P: PB2 -> ShiftReg I/P: SRCLK
 cbi DDRD,6			; Pushbutton A -> Board I/P: PD6
 cbi DDRD,7			; Pushbutton B -> Board I/P: PD7
 
-; Configure custom state register
 
-;---------Usage----------
+;---------| Configure custom state register |---------
+.def Ctrl_Reg = R2				; custom state values stored in R2
+
+; state masks
+.equ A_Pressed = 0b00000001	; bit 0: button A was pulled down (pressed) (0:pulled up | 1:pulled down)
+.equ B_Pressed = 0b00000010 ; bit 1: button B was pulled down (pressed) (0:pulled up | 1:pulled down)
+.equ Incr_Mode = 0b00000100		; bit 2: current increment mode (0:1s | 1:10s)
+.equ Counting = 0b00001000		; bit 3: counter run state (0:Stopped | 1:Running)
+
+;---Usage---
 ; Set State
 ; sbi Control_Reg, (state mask)
 
@@ -47,46 +55,41 @@ cbi DDRD,7			; Pushbutton B -> Board I/P: PD7
 ; cbr Control_Reg, (state mask)
 
 ; Read State
-; sbrc CustomStateReg, (reg bit #)  ; Skip if bit is clear (not set)
+; sbrc Control_Reg, (reg bit #)  ; Skip next if bit is clear/0
 ; Code for State A
-;------------------------
+;---------------------------------------------------
 
-.def Control_Reg = R2				; custom state values stored in R2
 
-; state masks
-.equ Button_Released = 0b00000001	; bit 0 represents if button has been released (0:pressed | 1:released)
-.equ Increment_Mode = 0b00000010	; bit 1 represents current increment mode (0:1s | 1:10s)
-
-;------------------------
-
-; begin main loop
+;-------------------| Main Loop |-------------------
 start:
 	ldi R16, hex0	; initially load 0 to display
 
-	SBIS PIND,6		; Skip next if A is 1
-	rcall Press_A	; call Press_A
+	sbis PIND,6					; If A is pulled down:
+	sbi Control_Reg, A_Pressed	; Then change A_Pressed state
 
-	SBIS PIND,7		; Skip next if B is 1
-	rcall Press_B	; call Press_B
+	sbis PIND,7		; If B is pulled down:
+	rcall Press_B	; Then call Press_B
+
+	sbrs Ctrl_Reg, Incr_Mode	; if Incr_Mode is 0:
+	rcall 1s_Delay				; then run 1s delay subroutine
+	sbrc Ctrl_Reg, Incr_Mode	; if Incr_Mode is 1:
+	rcall 10s_Delay				; then run 10s delay subroutine
 
 	rcall display	; call display subroutine
 rjmp start
+;----------------------------------------------------
 
 
-; handle pushbutton A press down
-Press_A:
-	ret				; return
-
-; handle pushbutton B press down
+;------| Pushbutton B pull down event handling |------
 Press_B:
-	rcall check_release_1s		; check if released under 1 second
-	BRTS Reset_Counter			; if T flag set -> branch to Reset_Counter
+	rcall 1s_Delay			; check if released under 1 second
+	brts Reset_Counter		; if T flag set -> branch to Reset_Counter
 
-	rcall check_release_1s		; check if released between 1 & 2 seconds
-	BRTS Toggle_Incr_Mode		; branch to Reset_Counter if T set
+	rcall 1s_Delay			; check if released between 1 & 2 seconds
+	brts Tggl_Incr_Mode	; branch to Reset_Counter if T set
 
-	rcall check_release_1s		; check if released over 2 seconds
-	BRTS Clear_Count_Overflow	; branch to Reset_Counter if T set
+	rcall 1s_Delay			; check if released over 2 seconds
+	brts Clr_Ovrflw			; branch to Reset_Counter if T set
 
 ; reset counter to 0
 ; TODO: implement stop condition check and reset
@@ -100,14 +103,24 @@ Toggle_Incr_Mode:
 
 ; clear counter overflow condition ("-")
 ; TODO: implement check for overflow and reset
-Clear_Count_Overflow:
+Clr_Ovrflw:
 	ret				; return
+;----------------------------------------------------
 
 
-; check if button pushed within 1 s of call
+;----------------| Count Handling |------------------
+; 10 second delay; calls 1s_Delay 10 times
+10s_Delay:
+	ldi r27,0x0A		; load hex val for decrement (10)
+Next_Second:
+	dec r27				; r27 <- r27 - 1
+	brne Next_Second	; loop if r27 is not '0'
+	ret					; return
+
+; 1 second delay w/ button release check
 .equ count1 = 0xFA00	; assign hex val for outer loop decrement (64000)
 .equ count2 = 0xFA		; assign hex val for inner loop decrement (250)
-check_release_1s:
+1s_Delay:
 	ldi r25, low(count1)	; load count1 into outer loop counter (r26:r25)
 	ldi r26, high(count1)
 D1:
@@ -121,13 +134,13 @@ D2:
 	sbiw r26:r25, 1 ; r26:r25 <-- r26:r25 - 1
 	brne D1			; branch to D1 if result is not "0"
 	ret				; return
-
 Release_B:
 	set				; set T flag in sreg (TODO: need to change to use custom state register)
 	ret				; return early
+;----------------------------------------------------
 
 
-; subroutine for displaying digit
+;-------| Shift Reg/7-Seg Display Subroutine |-------
 display:
 	; backup used registers on stack
 	push R16		; Push R16 to stack
@@ -160,4 +173,5 @@ end:
 	out SREG, R17
 	pop R17
 	pop R16
-ret
+	ret
+;----------------------------------------------------
