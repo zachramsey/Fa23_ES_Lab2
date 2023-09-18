@@ -51,8 +51,8 @@ cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
 .def Ctrl_Reg = R2				; custom state values stored in R2
 
 ; state masks
-.equ A_Pressed = 0b00000001		; bit 0: button A was pressed   (0:None    | 1:Pressed)
-.equ B_Pressed = 0b00000010		; bit 1: button B was pressed   (0:None    | 1:Pressed)
+.equ A_State = 0b00000001		; bit 0: button A was pressed   (0:None    | 1:Pressed)
+.equ B_State = 0b00000010		; bit 1: button B was pressed   (0:None    | 1:Pressed)
 .equ Incr_Mode = 0b00000100		; bit 2: incrementing mode		(0:1s      | 1:10s)
 .equ Run_State = 0b00001000		; bit 3: incrementing state     (0:Stopped | 1:Running)
 .equ Reset_State = 0b00010000	; bit 5: reset state            (0:None    | 1:Reset
@@ -77,7 +77,7 @@ cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
 
 ;===================| Main Loop |====================
 start:
-	ldi R16, hex0			; initially load 0 to display
+	ld R16, digit_patterns	; initially load 0 to display
 
 	sbis PIND,7				; If B is pressed -> Call Press_B
 	rcall Press_B
@@ -97,22 +97,24 @@ start:
 
 ;===========| Running State Subroutine |=============
 Count_Running:
-	sbrs Ctrl_Reg, Incr_Mode	; If Incr_Mode is 0 -> call 1s_Delay subroutine
-	rcall 1s_Delay
-	sbrc Ctrl_Reg, Incr_Mode	; If Incr_Mode is 1 -> call 10s_Delay subroutine
-	rcall 10s_Delay
+	sbrs Ctrl_Reg, Incr_Mode	; If Incr_Mode is 0 -> call one_delay subroutine
+	rcall one_delay
+	sbrc Ctrl_Reg, Incr_Mode	; If Incr_Mode is 1 -> call ten_delay subroutine
+	rcall ten_delay
+
+
 	ret							; Return
 ;====================================================
 
 
 ;===========| Stopped State Subroutine |=============
 Count_Stopped:
-	sbis PIND,6				; If A is pressed -> Set A_Pressed to 1
-	sbi Ctrl_Reg, A_Pressed
+	sbis PIND,6				; If A is pressed -> Set A_State to 1
+	sbi Ctrl_Reg, A_State
 
-	sbrc Ctrl_Reg, 0		; If A_Pressed is 1 -> Call Press_A
+	sbrc Ctrl_Reg, 0		; If A_State is 1 -> Call Press_A
 	rcall Press_A
-	ret							; Return
+	ret						; Return
 ;====================================================
 
 
@@ -124,19 +126,19 @@ Press_A:
 
 ;========| Handle Pushbutton B Press Event |=========
 Press_B:
-	sbi Ctrl_Reg, B_Pressed	; Set B_Pressed state
+	sbi Ctrl_Reg, B_State	; Set B_State
 
-	rcall 1s_Delay		; check if released within 1st second
-	sbrs Ctrl_Reg, 1	; If B_Pressed is 0 -> branch to Reset_Counter
+	rcall one_delay		; check if released within 1st second
+	sbrs Ctrl_Reg, 1	; If B_State is 0 -> branch to Reset_Counter
 	rjmp Reset_Counter
 
-	rcall 1s_Delay		; check if released within 2nd second
-	sbrs Ctrl_Reg, 1	; If B_Pressed is 0 -> branch to Tggl_Incr_Mode
+	rcall one_delay		; check if released within 2nd second
+	sbrs Ctrl_Reg, 1	; If B_State is 0 -> branch to Tggl_Incr_Mode
 	rjmp Tggl_Incr_Mode
 
 Wait_Longer:
-	rcall 1s_Delay		; check if released in following seconds
-	sbrc Ctrl_Reg, 1	; If B_Pressed is 1 -> branch to Clr_Ovrflw
+	rcall one_delay		; check if released in following seconds
+	sbrc Ctrl_Reg, 1	; If B_State is 1 -> branch to Clr_Ovrflw
 	rjmp Clr_Ovrflw
 	rjmp Wait_Longer	; else -> jump back to Wait_Longer
 
@@ -164,8 +166,8 @@ Clr_Ovrflw:
 
 
 ;===========| Incrementing Subroutines |=============
-; 10 second delay; calls 1s_Delay 10 times
-10s_Delay:
+; 10 second delay; calls one_delay 10 times
+ten_delay:
 	ldi r27,0x0A		; load hex val for decrement (10)
 Next_Second:
 	dec r27				; r27 <- r27 - 1
@@ -175,19 +177,19 @@ Next_Second:
 ; 1 second delay w/ button release check
 .equ count1 = 0xFA00		; assign hex val for outer loop decrement (64000) TODO: dial these in to 1s
 .equ count2 = 0xFA			; assign hex val for inner loop decrement (250)
-1s_Delay:
+one_delay:
 	ldi r25, low(count1)	; load count1 into outer loop counter (r26:r25)
 	ldi r26, high(count1)
 D1:
 	ldi r24, count2			; load count2 into inner loop counter (r24)
 
-	sbis PIND,6				; If A is pressed -> set A_Pressed to 1
-	sbi Ctrl_Reg, A_Pressed
+	sbis PIND,6				; If A is pressed -> set A_State to 1
+	sbi Ctrl_Reg, A_State
 
-	sbrc Ctrl_Reg, 0		; If A_Pressed is 1 -> jump to A_Pressed
+	sbrc Ctrl_Reg, 0		; If A_State is 1 -> jump to A_Pressed
 	rjmp A_Pressed
 
-	sbrc Ctrl_Reg, 1		; If B_Pressed is 1 -> jump to B_Pressed
+	sbrc Ctrl_Reg, 1		; If B_State is 1 -> jump to B_Pressed
 	rjmp B_Pressed
 D2:
 	dec r24					; r24 <-- r24 - 1
@@ -208,7 +210,7 @@ B_Pressed:
 	rjmp Release_B
 	rjmp D2					; else -> jump back to D2
 B_Released:
-	cbr Ctrl_Reg, B_Pressed ; Clear B_Pressed state
+	cbr Ctrl_Reg, B_State ; Clear B_State
 	ret						; return early
 ;====================================================
 
