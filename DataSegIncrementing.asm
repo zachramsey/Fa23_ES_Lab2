@@ -30,7 +30,7 @@ start:
 	rcall counter
 
 	ldi XL, low(data_segment)   ; Load the low byte of the data segment address into XL
-	ldi XH, high(data_segment)  ; Load the high byte of the data segment address into XH
+	;ldi XH, high(data_segment)  ; Load the high byte of the data segment address into XH
 
 	ldi R18, 15                  ; Set the loop counter to 5 (number of data bytes)
 
