@@ -1,8 +1,7 @@
 ;>>>>>Begin Data Segment<<<<<
 .dseg
 .org 0x0100
-; Hex Digit Pattern Encoding
-Digit_Patterns: .byte 16
+Digit_Patterns: .byte 16	; Hex Digit Pattern Encoding
 ;>>>>>>End Data Segment<<<<<<
 
 
@@ -39,9 +38,10 @@ cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
 main:
 	ldi ZH, high(Digit_Patterns)	; Move Z register 
     ldi ZL, low(Digit_Patterns)
+
 	ldi R20, 0x3F	; "0" Pattern
 	st Z+, R20
-	ldi R20, 0x30	; "1" Pattern
+	ldi R20, 0x06	; "1" Pattern
 	st Z+, R20
 	ldi R20, 0x5B	; "2" Pattern
 	st Z+, R20
@@ -71,8 +71,8 @@ main:
 	st Z+, R20
 	ldi R20, 0x71	; "F" Pattern
 	st Z+, R20
+
 	sbr Ctrl_Reg, Reset_State	; set Reset_State initially
-	ldi R20, 16					; 16 elements in digit pattern array
 start:
 	sbrc Ctrl_Reg, 5		; if Reset_State is 1 -> call Count_Reset
 	rcall Count_Reset
@@ -84,7 +84,7 @@ start:
 	rcall Count_Running
 
 	rcall display			; call display subroutine
-	rjmp start				; continue loop
+rjmp start				; continue loop
 ;====================================================
 
 
@@ -93,7 +93,7 @@ Count_Reset:
 	ldi ZH, high(Digit_Patterns)	; Move Z register 
     ldi ZL, low(Digit_Patterns)
 	ld R16, Z+	; initially load 0 to display
-	ldi R19, 0x00	; reset counter iterator to 0
+	ldi R20, 16	; reset counter decrement to 16
 	cbr Ctrl_Reg, Reset_State	; Clear Reset_State
 	ret
 ;====================================================
@@ -103,10 +103,9 @@ Count_Reset:
 Count_Running:
 	sbrs Ctrl_Reg, Incr_Mode	; If Incr_Mode is 0 -> call one_delay subroutine
 	rcall one_delay
-	cp R19, R20
-	breq loop_count
+	dec R20
+	brne loop_count
 	ld R16, Z+
-	inc R19
 	ret							; Return
 loop_count:
 	sbr Ctrl_Reg, Reset_State	; set Reset_State
@@ -120,12 +119,8 @@ Count_Stopped:
 	sbr Ctrl_Reg, A_State
 
 	sbrc Ctrl_Reg, 0		; If A_State is 1 -> Call Press_A
-	rcall Press_A
+	rjmp Press_A
 	ret						; Return
-;====================================================
-
-
-;========| Handle Pushbutton A Press Event |=========
 Press_A:
 	sbic PIND, 6			; If A released -> Clr A_State
 	cbr Ctrl_Reg, A_State
