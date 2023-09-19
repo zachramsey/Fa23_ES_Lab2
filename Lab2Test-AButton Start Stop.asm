@@ -73,6 +73,19 @@ main:
 	st Z+, R20
 
 	sbr Ctrl_Reg, Reset_State	; set Reset_State initially
+;-----Usage-----
+; Set State:
+; sbi Ctrl_Reg, (state mask)
+
+; Clear State:
+; cbr Ctrl_Reg, (state mask)
+
+; Skip next if bit is 0:
+; sbrc Ctrl_Reg, (reg bit #)
+
+; Skip next if bit is 1:
+; sbrs Ctrl_Reg, (reg bit #)
+;---------------
 start:
 	sbrc Ctrl_Reg, 5		; if Reset_State is 1 -> call Count_Reset
 	rcall Count_Reset
@@ -90,6 +103,11 @@ rjmp start				; continue loop
 
 ;============| Reset State Subroutine |==============
 Count_Reset:
+	ldi R16, 0x50
+	rcall display
+	rcall one_delay
+
+
 	ldi ZH, high(Digit_Patterns)	; Move Z register 
     ldi ZL, low(Digit_Patterns)
 	ld R16, Z+	; initially load 0 to display
@@ -115,6 +133,10 @@ loop_count:
 
 ;===========| Stopped State Subroutine |=============
 Count_Stopped:
+	ldi R16, 0x6D ; Load 's' into display to show stopped is running
+	rcall display
+	rcall one_delay ; give me time to see the pattern
+
 	sbis PIND,6				; If A is pressed -> Set A_State to 1
 	sbr Ctrl_Reg, A_State
 
@@ -133,7 +155,7 @@ Press_A:
 ;===========| Incrementing Subroutines |=============
 
 ; 1 second delay w/ button release check
-.equ count1 = 0xFA00		; assign hex val for outer loop decrement (64000) TODO: dial these in to 1s
+.equ count1 = 0x0AF0		; assign hex val for outer loop decrement was 0x0AF0 (64000) TODO: dial these in to 1s
 .equ count2 = 0xFA			; assign hex val for inner loop decrement (250)
 one_delay:
 	ldi r26, low(count1)	; load count1 into outer loop counter (r27:r26)
@@ -151,7 +173,7 @@ D2:
 	brne D2					; If r24 is not 0 -> branch to D2
 	sbiw r27:r26, 1			; r27:r26 <-- r27:r26 - 1
 	brne D1					; if r26:r25 is not 0 -> branch to D1 
-	ret						; return
+ret						; return
 
 A_Pressed:
 	sbic PIND,6				; If button A is released -> jump to Release_A
@@ -160,7 +182,7 @@ A_Pressed:
 A_Released:
 	cbr Ctrl_Reg, A_State	; Clear A_State
 	cbr Ctrl_Reg, Run_state	; Clear Run_State
-	ret						; return early
+ret						; return early
 ;====================================================
 
 
