@@ -4,31 +4,12 @@
 ; Created: 9/12/2023 7:02:54 PM
 ; Author : Trey Vokoun
 ;
-; prints out some random nonsense, then spells cope at the end.
-; Using this to dest data segmenting.
 
 .include "m328Pdef.inc" ; tells what microcontroller we have and what instructions it takes
 
 ; Define the data segment
 .dseg
-data_segment:
-    .byte 0x3F	; "0" Pattern
-	.byte 0x30	; "1" Pattern
-	.byte 0x5B	; "2" Pattern
-	.byte 0x4F	; "3" Pattern
-	.byte 0x66	; "4" Pattern
-	.byte 0x6D	; "5" Pattern
-	.byte 0x7D	; "6" Pattern
-	.byte 0x07	; "7" Pattern
-	.byte 0x7F	; "8" Pattern
-	.byte 0x67	; "9" Pattern
-	.byte 0x77	; "A" Pattern
-	.byte 0x7C	; "b" Pattern
-	.byte 0x39	; "C" Pattern
-	.byte 0x5E	; "d" Pattern
-	.byte 0x79	; "E" Pattern
-	.byte 0x71	; "F" Pattern
-	.byte 0x40	; "-" Pattern
+data_segment: .db 0x3F,0x30,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x67,0x77,0x7C,0x39,0x5E,0x79,0x71
 
 ;>>>>>Begin Code Segment<<<<<
 .cseg
@@ -44,14 +25,14 @@ sbi   DDRB,2      ; PB2 is now output for ShiftRegister's SRCLK Input
 ; start main program
 start:
 	; display a digit
-	ldi R16, 0x00 ; load pattern to display  (3F = 0)
+	ldi R16, 0x3F ; load pattern to display  (3F = 0)
 	rcall display ; call display subroutine
 	rcall counter
 
 	ldi XL, low(data_segment)   ; Load the low byte of the data segment address into XL
 	ldi XH, high(data_segment)  ; Load the high byte of the data segment address into XH
 
-	ldi r17, 5                  ; Set the loop counter to 5 (number of data bytes)
+	ldi R18, 15                  ; Set the loop counter to 5 (number of data bytes)
 
 	mainloop:
 		ld R16, X+              ; Load data from the address pointed to by X into r16 which is the display
@@ -61,8 +42,8 @@ start:
 
 		;inc X                   ; Increment the X register to point to the next address
 
-		dec r17                 ; Decrement the loop counter
-		brne mainloop               ; If the loop counter is not zero, repeat the loop
+		dec R18                 ; Decrement the loop counter
+	brne mainloop               ; If the loop counter is not zero, repeat the loop
 
 	; The loop will iterate through the data_segment, loading each byte into r17
 	rcall spellcope ; just putting this here to test when it loops back
