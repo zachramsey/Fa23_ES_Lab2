@@ -9,7 +9,10 @@
 
 ; Define the data segment
 .dseg
-data_segment: .db 0x3F,0x30,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x67,0x77,0x7C,0x39,0x5E,0x79,0x71
+.org 0x0100
+Digit_Patterns: .byte 16 ;reserve 16 bytes
+
+
 
 ;>>>>>Begin Code Segment<<<<<
 .cseg
@@ -22,6 +25,46 @@ sbi   DDRB,0	  ; PB0 is now output for ShiftRegister's SER
 sbi   DDRB,1      ; PB1 is now output for ShiftRegister's RCLK Input
 sbi   DDRB,2      ; PB2 is now output for ShiftRegister's SRCLK Input
 
+
+;===================| Main Loop |====================
+main:
+	ldi ZH, high(Digit_Patterns)	; Move Z register 
+    ldi ZL, low(Digit_Patterns)
+	ldi R20, 0x3F	; "0" Pattern
+	st Z+, R20
+	ldi R20, 0x06	; "1" Pattern
+	st Z+, R20
+	ldi R20, 0x5B	; "2" Pattern
+	st Z+, R20
+	ldi R20, 0x4F	; "3" Pattern
+	st Z+, R20
+	ldi R20, 0x66	; "4" Pattern
+	st Z+, R20
+	ldi R20, 0x6D	; "5" Pattern
+	st Z+, R20
+	ldi R20, 0x7D	; "6" Pattern
+	st Z+, R20
+	ldi R20, 0x07	; "7" Pattern
+	st Z+, R20
+	ldi R20, 0x7F	; "8" Pattern
+	st Z+, R20
+	ldi R20, 0x67	; "9" Pattern
+	st Z+, R20
+	ldi R20, 0x77	; "A" Pattern
+	st Z+, R20
+	ldi R20, 0x7C	; "b" Pattern
+	st Z+, R20
+	ldi R20, 0x39	; "C" Pattern
+	st Z+, R20
+	ldi R20, 0x5E	; "d" Pattern
+	st Z+, R20
+	ldi R20, 0x79	; "E" Pattern
+	st Z+, R20
+	ldi R20, 0x71	; "F" Pattern
+	st Z+, R20
+	;sbr Ctrl_Reg, Reset_State	; set Reset_State initially
+	ldi R20, 16					; 16 elements in digit pattern array
+
 ; start main program
 start:
 	; display a digit
@@ -29,19 +72,19 @@ start:
 	rcall display ; call display subroutine
 	rcall counter
 
-	ldi XL, low(data_segment)   ; Load the low byte of the data segment address into XL
-	;ldi XH, high(data_segment)  ; Load the high byte of the data segment address into XH
+	ldi ZL, low(Digit_Patterns)   ; Load the low byte of the data segment address into XL
+	ldi ZH, high(Digit_Patterns)  ; Load the high byte of the data segment address into XH
 
-	ldi R18, 15                  ; Set the loop counter to 5 (number of data bytes)
+	ldi R18, 16                  ; Set the loop counter to 5 (number of data bytes)
+	
+	ldi ZH, high(Digit_Patterns)	; Move Z register to beginning
+    ldi ZL, low(Digit_Patterns)
 
 	mainloop:
-		ld R16, X+              ; Load data from the address pointed to by X into r16 which is the display
+		ld R16, Z+              ; Load data from the address pointed to by X into r16 which is the display
 		; Do something with r16, e.g., store it in memory or perform calculations
 		rcall display ; push the new pattern
 		rcall counter
-
-		;inc X                   ; Increment the X register to point to the next address
-
 		dec R18                 ; Decrement the loop counter
 	brne mainloop               ; If the loop counter is not zero, repeat the loop
 
@@ -107,14 +150,14 @@ spellcope:
 ret
 
 counter:
-	ldi r30, low(count)	  	; r31:r30  <-- load a 16-bit value into counter register for outer loop
-	ldi r31, high(count);
+	ldi r26, low(count)	  	; r31:r30  <-- load a 16-bit value into counter register for outer loop
+	ldi r27, high(count);
 	d1:
 		ldi   r29, 0xfb		    	; r29 <-- load a 8-bit value into counter register for inner loop
 		d2:
 			nop				; no operation
 			dec   r29            		; r29 <-- r29 - 1
 		brne  d2			; branch to d2 if result is not "0"
-		sbiw r31:r30, 1			; r31:r30 <-- r31:r30 - 1
+		sbiw r27:r26, 1			; r31:r30 <-- r31:r30 - 1
 	brne d1				; branch to d1 if result is not "0"
 ret				; return
