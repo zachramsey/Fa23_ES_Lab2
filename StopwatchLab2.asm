@@ -1,35 +1,16 @@
-;
+;====================================
 ; StopwatchLab2.asm
 ;
 ; Created: 9/12/2023 7:02:54 PM
-; Author : Trey Vokoun & Zach Ramsey
-;
+; Authors: Trey Vokoun & Zach Ramsey
+;====================================
 
-.include "m328Pdef.inc" ; tells what microcontroller we have and what instructions it takes
+.include "m328Pdef.inc" ; microcontroller-specific definitions
 
 ;>>>>>Begin Data Segment<<<<<
 .dseg
-; Hex Digit Pattern Encoding
-digit_patterns:
-	.byte 0x3F	; "0" Pattern
-	.byte 0x30	; "1" Pattern
-	.byte 0x5B	; "2" Pattern
-	.byte 0x4F	; "3" Pattern
-	.byte 0x66	; "4" Pattern
-	.byte 0x6D	; "5" Pattern
-	.byte 0x7D	; "6" Pattern
-	.byte 0x07	; "7" Pattern
-	.byte 0x7F	; "8" Pattern
-	.byte 0x67	; "9" Pattern
-	.byte 0x77	; "A" Pattern
-	.byte 0x7C	; "b" Pattern
-	.byte 0x39	; "C" Pattern
-	.byte 0x5E	; "d" Pattern
-	.byte 0x79	; "E" Pattern
-	.byte 0x71	; "F" Pattern
-	.byte 0x40	; "-" Pattern
-;>>>>>>End Data Segment<<<<<<
-
+.org 0x0100
+Digit_Patterns: .byte 16	; Hex Digit Pattern Encoding
 
 ;>>>>>Begin Code Segment<<<<<
 .cseg
@@ -44,23 +25,22 @@ sbi DDRB,2	; Board O/P: PB2 -> ShiftReg I/P: SRCLK
 ; Input from pushbuttons
 cbi DDRD,6	; Pushbutton A -> Board I/P: PD6
 cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
-;====================================================
 
 
 ;========| Configure custom state register |=========
-.def Ctrl_Reg = R2				; custom state values stored in R2
+.def Ctrl_Reg = R19				; custom state values stored in R18
 
 ; state masks
 .equ A_State = 0b00000001		; bit 0: button A was pressed   (0:None    | 1:Pressed)
 .equ B_State = 0b00000010		; bit 1: button B was pressed   (0:None    | 1:Pressed)
 .equ Incr_Mode = 0b00000100		; bit 2: incrementing mode		(0:1s      | 1:10s)
 .equ Run_State = 0b00001000		; bit 3: incrementing state     (0:Stopped | 1:Running)
-.equ Reset_State = 0b00010000	; bit 5: reset state            (0:None    | 1:Reset
-.equ Ovrflw = 0b00100000		; bit 6: overflow state         (0:None    | 1:Overflow)
+.equ Reset_State = 0b00010000	; bit 4: reset state            (0:None    | 1:Reset)
+.equ Ovrflw = 0b00100000		; bit 5: overflow state         (0:None    | 1:Overflow)
 
 ;-----Usage-----
 ; Set State:
-; sbi Ctrl_Reg, (state mask)
+; sbr Ctrl_Reg, (state mask)
 
 ; Clear State:
 ; cbr Ctrl_Reg, (state mask)
@@ -72,150 +52,130 @@ cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
 ; sbrs Ctrl_Reg, (reg bit #)
 ;---------------
 
-;====================================================
+
+;=========| Load Values to Digit_Patterns |==========
+ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
+ldi ZL, low(Digit_Patterns)
+
+ldi R20, 0x3F	; "0" Pattern
+st Z+, R20
+ldi R20, 0x06	; "1" Pattern
+st Z+, R20
+ldi R20, 0x5B	; "2" Pattern
+st Z+, R20
+ldi R20, 0x4F	; "3" Pattern
+st Z+, R20
+ldi R20, 0x66	; "4" Pattern
+st Z+, R20
+ldi R20, 0x6D	; "5" Pattern
+st Z+, R20
+ldi R20, 0x7D	; "6" Pattern
+st Z+, R20
+ldi R20, 0x07	; "7" Pattern
+st Z+, R20
+ldi R20, 0x7F	; "8" Pattern
+st Z+, R20
+ldi R20, 0x67	; "9" Pattern
+st Z+, R20
+ldi R20, 0x77	; "A" Pattern
+st Z+, R20
+ldi R20, 0x7C	; "b" Pattern
+st Z+, R20
+ldi R20, 0x39	; "C" Pattern
+st Z+, R20
+ldi R20, 0x5E	; "d" Pattern
+st Z+, R20
+ldi R20, 0x79	; "E" Pattern
+st Z+, R20
+ldi R20, 0x71	; "F" Pattern
+st Z+, R20
 
 
 ;===================| Main Loop |====================
+sbr Ctrl_Reg, Reset_State	; Start in reset condition
+
 start:
-	ld R16, digit_patterns	; initially load 0 to display
+	sbrc Ctrl_Reg, 4		; if Reset_State is 1 -> call Count_Reset
+	rcall Count_Reset
 
-	sbis PIND,7				; If B is pressed -> Call Press_B
-	rcall Press_B
-
-
-	sbrs Ctrl_Reg, 3		; If running state is 0 -> Call Count_Stopped
+	sbrs Ctrl_Reg, 3		; If Run_State is 0/stopped -> Call Count_Stopped
 	rcall Count_Stopped
 
-	sbrc Ctrl_Reg, 3		; If running state is 1 -> Call Count_Running
+	sbrc Ctrl_Reg, 3		; If Run_State is 1/Running -> Call Count_Running
 	rcall Count_Running
 
-
-	rcall display			; call display subroutine
 	rjmp start				; continue loop
-;====================================================
+
+
+;============| Reset State Subroutine |==============
+Count_Reset:
+	ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
+    ldi ZL, low(Digit_Patterns)
+	ld R16, Z+						; load first digit to display
+	rcall display
+	ldi R18, 16						; set counter to 16
+	cbr Ctrl_Reg, Reset_State		; Clear Reset_State
+	ret
 
 
 ;===========| Running State Subroutine |=============
 Count_Running:
-	sbrs Ctrl_Reg, Incr_Mode	; If Incr_Mode is 0 -> call one_delay subroutine
+	sbrs Ctrl_Reg, 2				; If Incr_Mode is 0 -> call one_delay subroutine
 	rcall one_delay
-	sbrc Ctrl_Reg, Incr_Mode	; If Incr_Mode is 1 -> call ten_delay subroutine
-	rcall ten_delay
-
-
-	ret							; Return
-;====================================================
+	ld R16, Z+						; Load next digit in table
+	rcall display					; Display it
+	dec R18							; If R18 has not reached 0 -> Loop
+	brne Count_Running
+loop_count:
+	ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
+    ldi ZL, low(Digit_Patterns)
+	ld R16, Z+						; load first digit to display
+	rcall display
+	ldi R18, 16						; set counter to 16
+	rjmp Count_Running				; Loop
 
 
 ;===========| Stopped State Subroutine |=============
 Count_Stopped:
-	sbis PIND,6				; If A is pressed -> Set A_State to 1
-	sbi Ctrl_Reg, A_State
-
-	sbrc Ctrl_Reg, 0		; If A_State is 1 -> Call Press_A
-	rcall Press_A
+	sbis PIND,6				; If A is pressed -> Jump to A_Pressed
+	rjmp A_Pressed
+	sbis PIND,7				; If B is pressed -> Jump to B_Pressed
+	rjmp B_Pressed
+	rjmp Count_Stopped		; Else -> Jump to Count_Stopped
+A_Pressed:
+	sbis PIND, 6			; If A is released -> Continue to A_Released
+	rjmp A_Pressed
+A_Released:
+	sbr Ctrl_Reg, Run_State	; Set Run_State to 1
 	ret						; Return
-;====================================================
-
-
-;========| Handle Pushbutton A Press Event |=========
-Press_A:
-	
-;====================================================
-
-
-;========| Handle Pushbutton B Press Event |=========
-Press_B:
-	sbi Ctrl_Reg, B_State	; Set B_State
-
-	rcall one_delay		; check if released within 1st second
-	sbrs Ctrl_Reg, 1	; If B_State is 0 -> branch to Reset_Counter
-	rjmp Reset_Counter
-
-	rcall one_delay		; check if released within 2nd second
-	sbrs Ctrl_Reg, 1	; If B_State is 0 -> branch to Tggl_Incr_Mode
-	rjmp Tggl_Incr_Mode
-
-Wait_Longer:
-	rcall one_delay		; check if released in following seconds
-	sbrc Ctrl_Reg, 1	; If B_State is 1 -> branch to Clr_Ovrflw
-	rjmp Clr_Ovrflw
-	rjmp Wait_Longer	; else -> jump back to Wait_Longer
-
-; reset counter
-Reset_Counter:
-	sbrs Ctrl_Reg, Run_State	; If Run_State is 0 -> Set Reset_state to 1
-	sbi Ctrl_Reg, Reset_State
-	ret							; return
-
-; toggle increment mode
-Toggle_Incr_Mode:
-	sbrs Ctrl_Reg, Incr_Mode	; If Incr_Mode is 0 -> Set Incr_Mode to 1
-	sbi Ctrl_Reg, Incr_Mode
-	sbrc Ctrl_Reg, Incr_Mode	; If Incr_Mode is 1 -> Clr Incr_Mode to 0
-	cbr Ctrl_Reg, Incr_Mode
-	ret							; return
-
-; clear counter overflow condition ("-")
-Clr_Ovrflw:
-	sbrs Ctrl_Reg, 6			; If Ovrflw condition is 1 -> Set Reset_state to 1
-	sbi Ctrl_Reg, Reset_State
-	cbr Ctrl_Reg, Ovrflw		; Clr Ovrflw condition to 0
-	ret							; return
-;====================================================
+B_Pressed:
+	sbis PIND, 7			; If B is released -> Continue to B_Released
+	rjmp B_Pressed
+B_Released:
+	ldi R16, 0x7c			; Temp; just tells you that you pressed B
+	rcall display
+	ret						; Return
 
 
 ;===========| Incrementing Subroutines |=============
-; 10 second delay; calls one_delay 10 times
-ten_delay:
-	ldi r27,0x0A		; load hex val for decrement (10)
-Next_Second:
-	dec r27				; r27 <- r27 - 1
-	brne Next_Second	; loop if r27 is not '0'
-	ret					; return
 
 ; 1 second delay w/ button release check
-.equ count1 = 0xFA00		; assign hex val for outer loop decrement (64000) TODO: dial these in to 1s
-.equ count2 = 0xFA			; assign hex val for inner loop decrement (250)
+.equ count1 = 0x6969		; assign hex val for outer loop decrement (64000) TODO: dial these in to 1s
+.equ count2 = 0x69			; assign hex val for inner loop decrement (250)
 one_delay:
-	ldi r25, low(count1)	; load count1 into outer loop counter (r26:r25)
-	ldi r26, high(count1)
+	ldi r26, low(count1)	; load count1 into outer loop counter (r27:r26)
+	ldi r27, high(count1)
 D1:
-	ldi r24, count2			; load count2 into inner loop counter (r24)
-
-	sbis PIND,6				; If A is pressed -> set A_State to 1
-	sbi Ctrl_Reg, A_State
-
-	sbrc Ctrl_Reg, 0		; If A_State is 1 -> jump to A_Pressed
-	rjmp A_Pressed
-
-	sbrc Ctrl_Reg, 1		; If B_State is 1 -> jump to B_Pressed
-	rjmp B_Pressed
+	ldi r25, count2			; load count2 into inner loop counter (r25)
 D2:
-	dec r24					; r24 <-- r24 - 1
+	dec r25					; r25 <-- r25 - 1
 	brne D2					; If r24 is not 0 -> branch to D2
-	sbiw r26:r25, 1			; r26:r25 <-- r26:r25 - 1
+	sbiw r27:r26, 1			; r27:r26 <-- r27:r26 - 1
 	brne D1					; if r26:r25 is not 0 -> branch to D1 
 	ret						; return
 
-A_Pressed:
-	sbic PIND,6				; If button A is released -> jump to Release_A
-	rjmp A_Released
-	rjmp D2					; else -> jump back to D2
-A_Released:
-	cbr Ctrl_Reg, A_Pressed ; Clear A_Pressed state
-	ret						; return early
-B_Pressed:
-	sbic PIND,7				; If button B is released -> jump to Release_B
-	rjmp Release_B
-	rjmp D2					; else -> jump back to D2
-B_Released:
-	cbr Ctrl_Reg, B_State ; Clear B_State
-	ret						; return early
-;====================================================
 
-
-;=======| Shift Reg/7-Seg Display Subroutine |=======
+;============| Display Digit Subroutine |============
 display:
 	; backup used registers on stack
 	push R16		; Push R16 to stack
@@ -249,5 +209,3 @@ end:
 	pop R17
 	pop R16
 	ret
-;====================================================
-;>>>>>>End Code Segment<<<<<<
