@@ -109,7 +109,7 @@ start:
 	sbrc Ctrl_Reg, 3		; If Run_State is 1/Running -> Call Count_Running
 	rcall Count_Running
 
-	rjmp start				; continue loop
+rjmp start				; continue loop
 
 
 ;============| Reset State Subroutine |==============
@@ -120,7 +120,8 @@ Count_Reset:
 	rcall display
 	ldi Digit_Decr, 16				; Digit_Decr <- 16
 	cbr Ctrl_Reg, Reset_State		; Reset_State <- 0
-	ret
+	cbr Ctrl_Reg, Ovrflw			; Reset Overflow state
+ret
 
 
 ;===========| Running State Subroutine |=============
@@ -134,17 +135,16 @@ Count_Running:
 	rcall display					; Push to dispay
 	dec Digit_Decr					; If Digit_Decr has not reached 0 -> Loop
 	brne Count_Running
-loop_count:
-	ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
-    ldi ZL, low(Digit_Patterns)
-	ld Disp_Queue, Z+				; Load first digit to display
+overflow:
+	ldi Disp_Queue, 0x40            ;load dash into the queue
 	rcall display					; Push to display
-	ldi Digit_Decr, 16				; Digit_Decr <- 16
-	rjmp Count_Running				; Loop
+	cbr Ctrl_Reg, Run_State         ; clear the bit in the state register for Run_State because we have overflow and thus have stopped.
+	sbr Ctrl_Reg, Ovrflw			; Set overflow state
+rjmp Count_Stopped
 
 
 ;===========| Stopped State Subroutine |=============
-; TODO: Make overflow clearing implementation work (Re:Running State TODO)
+; TODO: Make overflow clearing implementation work (Re:Running State TODO) I think I solved this -Trey
 ;		Make increment mode toggle work
 Count_Stopped:
 	sbis PIND,6					; If A is pressed -> Jump to A_Pressed
@@ -195,8 +195,8 @@ Clr_Ovrflw:
 ;	ret
 
 ; 1 second delay w/ button release check
-.equ count1 = 0x6969		; assign hex val for outer loop decrement TODO: dial these in to 1s
-.equ count2 = 0x69			; assign hex val for inner loop decrement (nice)
+.equ count1 = 0x6000		; assign hex val for outer loop decrement TODO: dial these in to 1s
+.equ count2 = 0xE1			; assign hex val for inner loop decrement (nice)
 one_delay:
 	ldi R26, low(count1)	; load count1 into outer loop counter (R27:R26)
 	ldi R27, high(count1)
