@@ -147,10 +147,12 @@ Count_Running:
 	brne Count_Running
 overflow:
 	ldi Disp_Queue, 0x40            ;load dash into the queue
+	sbrc Ctrl_Reg, 2				; If Incr_Mode is 1 -> Set DP bit
+	sbr Disp_Queue, 0b10000000
 	rcall display					; Push to display
 	cbr Ctrl_Reg, Run_State         ; clear the bit in the state register for Run_State because we have overflow and thus have stopped.
 	sbr Ctrl_Reg, Ovrflw			; Set overflow state
-rjmp Count_Stopped
+	rjmp Count_Stopped
 
 
 ;===========| Stopped State Subroutine |=============
@@ -222,10 +224,8 @@ Next_Second:
 	ret
 
 ; 1 second delay w/ button release check
-;.equ count1 = 0x6000		; assign hex val for outer loop decrement TODO: dial these in to 1s
-;.equ count2 = 0xE1			; assign hex val for inner loop decrement (nice)
-.equ count1 = 0x6969
-.equ count2 = 0x69
+.equ count1 = 0x6000		; assign hex val for outer loop decrement
+.equ count2 = 0xE1			; assign hex val for inner loop decrement
 One_Delay:
 	ldi R26, low(count1)	; load count1 into outer loop counter (R27:R26)
 	ldi R27, high(count1)
