@@ -127,12 +127,20 @@ ret
 ;===========| Running State Subroutine |=============
 ; TODO: Implement overflow condition
 Count_Running:
-	sbrs Ctrl_Reg, 2				; If Incr_Mode is 0 -> call one_delay subroutine
-	rcall one_delay
+	sbrc Ctrl_Reg, 2				; If Incr_Mode is 1 -> call ten_delay subroutine
+	rcall Ten_Delay
+	rcall One_Delay					; Else -> call one_delay subroutine
+
 	sbrs Ctrl_Reg, 3				; If Run_State is 0 -> return
 	ret
+
 	ld Disp_Queue, Z+				; Load next digit in table
+
+	sbrc Ctrl_Reg, 2				; If Incr_Mode is 1 -> Set DP bit
+	sbr Disp_Queue, 0b10000000
+
 	rcall display					; Push to dispay
+
 	dec Digit_Decr					; If Digit_Decr has not reached 0 -> Loop
 	brne Count_Running
 overflow:
@@ -153,6 +161,8 @@ Count_Stopped:
 	rjmp B_Pressed
 	rjmp Count_Stopped			; Else -> Jump to Count_Stopped
 A_Pressed:
+	sbrc Ctrl_Reg, 5			; If Ovrflw is set -> Jump to Count_Stopped
+	rjmp Count_Stopped
 	sbis PIND, 6				; If A is released -> Continue to A_Released
 	rjmp A_Pressed
 A_Released:
@@ -160,6 +170,7 @@ A_Released:
 	ret
 B_Pressed:
 	sbr Ctrl_Reg, B_State		; B_State <- 1
+
 	rcall one_delay				; Wait 1s for button release
 	sbrs Ctrl_Reg, 1			; If B_State is 0 -> Jump to Reset_Count
 	rjmp Reset_Count
@@ -167,37 +178,53 @@ B_Pressed:
 	rcall one_delay				; Wait 1s for button release
 	sbrs Ctrl_Reg, 1			; If B_State is 0 -> Jump to Tggl_Incr_Mode
 	rjmp Tggl_Incr_Mode
-B_Wait:							
+
+B_Wait:
 	rcall one_delay				; Wait 1s for button release
 	sbrs Ctrl_Reg, 1			; If B_State is 0 -> Jump to Clr_Ovrflw
 	rjmp Clr_Ovrflw
 	rjmp B_Wait					; Else -> Loop to wait longer
+
 Reset_Count:
+	sbrc Ctrl_Reg, 5			; If Ovrflw is 1 -> Jump to Count_Stopped
+	rjmp Count_Stopped
 	sbr Ctrl_Reg, Reset_State	; Reset_State <- 1
 	ret
 Tggl_Incr_Mode:
-	sbr Ctrl_Reg, Incr_Mode		; Incr_Mode <- 1
+	sbrc Ctrl_Reg, 5			; If Ovrflw is 1 -> Jump to Count_Stopped
+	rjmp Count_Stopped
+
+	ldi R22, Incr_Mode
+	eor Ctrl_Reg, R22			; Switch Increment Mode
+
+	ldi R22, 0x80
+	ADD Disp_Queue, R22
+	rcall display				; Push to dispay
+
 	rjmp Count_Stopped
 Clr_Ovrflw:
-	sbrc Ctrl_Reg, 5			; If Ovrflw is 1 -> (Ovrflw <- 0)
-	cbr Ctrl_Reg, Ovrflw
-	rjmp Count_Stopped
+	sbrc Ctrl_Reg, 5			; If Ovrflw is 1 -> (Reset_State <- 1)
+	sbr Ctrl_Reg, Reset_State
+	cbr Ctrl_Reg, Ovrflw		; Ovrflw <- 0
+	ret
 
 
 ;===========| Incrementing Subroutines |=============
 
-; 10 second delay; calls one_delay 10 times (TODO: needs to early return if one_delay early returns)
-;Ten_Delay:
-;	ldi Ten_Decr, 10	; Ten_Decr <- 10
-;Next_Second:
-;	dec Ten_Decr		; r27 <- r27 - 1
-;	brne Next_Second	; If r27 is not 0 -> branch to Next_Second
-;	ret
+; calls one_delay 10 times (TODO: needs to early return if one_delay early returns)
+Ten_Delay:
+	ldi Ten_Decr, 10	; Ten_Decr <- 10
+Next_Second:
+	dec Ten_Decr		; r27 <- r27 - 1
+	brne Next_Second	; If r27 is not 0 -> branch to Next_Second
+	ret
 
 ; 1 second delay w/ button release check
-.equ count1 = 0x6000		; assign hex val for outer loop decrement TODO: dial these in to 1s
-.equ count2 = 0xE1			; assign hex val for inner loop decrement (nice)
-one_delay:
+;.equ count1 = 0x6000		; assign hex val for outer loop decrement TODO: dial these in to 1s
+;.equ count2 = 0xE1			; assign hex val for inner loop decrement (nice)
+.equ count1 = 0x6969
+.equ count2 = 0x69
+One_Delay:
 	ldi R26, low(count1)	; load count1 into outer loop counter (R27:R26)
 	ldi R27, high(count1)
 D1:
