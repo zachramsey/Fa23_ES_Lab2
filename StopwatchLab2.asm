@@ -117,6 +117,8 @@ Count_Reset:
 	ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
     ldi ZL, low(Digit_Patterns)
 	ld Disp_Queue, Z+				; Load first digit to display
+	sbrc Ctrl_Reg, 2				; If Incr_Mode is 1 -> Set DP bit
+	sbr Disp_Queue, 0b10000000
 	rcall display
 	ldi Digit_Decr, 16				; Digit_Decr <- 16
 	cbr Ctrl_Reg, Reset_State		; Reset_State <- 0
@@ -197,8 +199,7 @@ Tggl_Incr_Mode:
 	ldi R22, Incr_Mode
 	eor Ctrl_Reg, R22			; Switch Increment Mode
 
-	ldi R22, 0x80
-	ADD Disp_Queue, R22
+	sbr Disp_Queue, 0b10000000
 	rcall display				; Push to dispay
 
 	rjmp Count_Stopped
@@ -215,8 +216,9 @@ Clr_Ovrflw:
 Ten_Delay:
 	ldi Ten_Decr, 10	; Ten_Decr <- 10
 Next_Second:
-	dec Ten_Decr		; r27 <- r27 - 1
-	brne Next_Second	; If r27 is not 0 -> branch to Next_Second
+	rcall One_Delay
+	dec Ten_Decr		; Ten_Decr <- Ten_Decr - 1
+	brne Next_Second	; If Ten_Decr is not 0 -> branch to Next_Second
 	ret
 
 ; 1 second delay w/ button release check
