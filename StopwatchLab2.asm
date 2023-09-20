@@ -28,9 +28,14 @@ cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
 
 
 ;========| Configure custom state register |=========
-.def Ctrl_Reg = R19				; custom state values stored in R18
+.def Disp_Queue = R16	; Data queue for next digit to be displayed
+.def Disp_Decr = R17	; Count of remaining bits to be pushed from Disp_Queue; decrements from 8
+.def Digit_Decr = R18	; Count of remaining digits; decrements from 16
+.def Ctrl_Reg = R19		; Custom state register
+.def Digit_Buff = R20	; Data buffer for loading to Digit_Patterns
+.def Ten_Decr = R21		; Count of remaining calls to one_delay; decrements from 10
 
-; state masks
+; Custom state register masks
 .equ A_State = 0b00000001		; bit 0: button A was pressed   (0:None    | 1:Pressed)
 .equ B_State = 0b00000010		; bit 1: button B was pressed   (0:None    | 1:Pressed)
 .equ Incr_Mode = 0b00000100		; bit 2: incrementing mode		(0:1s      | 1:10s)
@@ -57,38 +62,38 @@ cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
 ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
 ldi ZL, low(Digit_Patterns)
 
-ldi R20, 0x3F	; "0" Pattern
-st Z+, R20
-ldi R20, 0x06	; "1" Pattern
-st Z+, R20
-ldi R20, 0x5B	; "2" Pattern
-st Z+, R20
-ldi R20, 0x4F	; "3" Pattern
-st Z+, R20
-ldi R20, 0x66	; "4" Pattern
-st Z+, R20
-ldi R20, 0x6D	; "5" Pattern
-st Z+, R20
-ldi R20, 0x7D	; "6" Pattern
-st Z+, R20
-ldi R20, 0x07	; "7" Pattern
-st Z+, R20
-ldi R20, 0x7F	; "8" Pattern
-st Z+, R20
-ldi R20, 0x67	; "9" Pattern
-st Z+, R20
-ldi R20, 0x77	; "A" Pattern
-st Z+, R20
-ldi R20, 0x7C	; "b" Pattern
-st Z+, R20
-ldi R20, 0x39	; "C" Pattern
-st Z+, R20
-ldi R20, 0x5E	; "d" Pattern
-st Z+, R20
-ldi R20, 0x79	; "E" Pattern
-st Z+, R20
-ldi R20, 0x71	; "F" Pattern
-st Z+, R20
+ldi Digit_Buff, 0x3F	; "0" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x06	; "1" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x5B	; "2" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x4F	; "3" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x66	; "4" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x6D	; "5" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x7D	; "6" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x07	; "7" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x7F	; "8" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x67	; "9" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x77	; "A" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x7C	; "b" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x39	; "C" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x5E	; "d" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x79	; "E" Pattern
+st Z+, Digit_Buff
+ldi Digit_Buff, 0x71	; "F" Pattern
+st Z+, Digit_Buff
 
 
 ;===================| Main Loop |====================
@@ -111,101 +116,153 @@ start:
 Count_Reset:
 	ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
     ldi ZL, low(Digit_Patterns)
-	ld R16, Z+						; load first digit to display
+	ld Disp_Queue, Z+				; Load first digit to display
 	rcall display
-	ldi R18, 16						; set counter to 16
-	cbr Ctrl_Reg, Reset_State		; Clear Reset_State
+	ldi Digit_Decr, 16				; Digit_Decr <- 16
+	cbr Ctrl_Reg, Reset_State		; Reset_State <- 0
 	ret
 
 
 ;===========| Running State Subroutine |=============
+; TODO: Implement overflow condition
 Count_Running:
 	sbrs Ctrl_Reg, 2				; If Incr_Mode is 0 -> call one_delay subroutine
 	rcall one_delay
-	ld R16, Z+						; Load next digit in table
-	rcall display					; Display it
-	dec R18							; If R18 has not reached 0 -> Loop
+	sbrs Ctrl_Reg, 3				; If Run_State is 0 -> return
+	ret
+	ld Disp_Queue, Z+				; Load next digit in table
+	rcall display					; Push to dispay
+	dec Digit_Decr					; If Digit_Decr has not reached 0 -> Loop
 	brne Count_Running
 loop_count:
 	ldi ZH, high(Digit_Patterns)	; Move pointer to front of Digit_Patterns
     ldi ZL, low(Digit_Patterns)
-	ld R16, Z+						; load first digit to display
-	rcall display
-	ldi R18, 16						; set counter to 16
+	ld Disp_Queue, Z+				; Load first digit to display
+	rcall display					; Push to display
+	ldi Digit_Decr, 16				; Digit_Decr <- 16
 	rjmp Count_Running				; Loop
 
 
 ;===========| Stopped State Subroutine |=============
+; TODO: Make overflow clearing implementation work (Re:Running State TODO)
+;		Make increment mode toggle work
 Count_Stopped:
-	sbis PIND,6				; If A is pressed -> Jump to A_Pressed
+	sbis PIND,6					; If A is pressed -> Jump to A_Pressed
 	rjmp A_Pressed
-	sbis PIND,7				; If B is pressed -> Jump to B_Pressed
+	sbis PIND,7					; If B is pressed -> Jump to B_Pressed
 	rjmp B_Pressed
-	rjmp Count_Stopped		; Else -> Jump to Count_Stopped
+	rjmp Count_Stopped			; Else -> Jump to Count_Stopped
 A_Pressed:
-	sbis PIND, 6			; If A is released -> Continue to A_Released
+	sbis PIND, 6				; If A is released -> Continue to A_Released
 	rjmp A_Pressed
 A_Released:
-	sbr Ctrl_Reg, Run_State	; Set Run_State to 1
-	ret						; Return
+	sbr Ctrl_Reg, Run_State		; Run_State <- 1
+	ret
 B_Pressed:
-	sbis PIND, 7			; If B is released -> Continue to B_Released
-	rjmp B_Pressed
-B_Released:
-	ldi R16, 0x7c			; Temp; just tells you that you pressed B
-	rcall display
-	ret						; Return
+	sbr Ctrl_Reg, B_State		; B_State <- 1
+	rcall one_delay				; Wait 1s for button release
+	sbrs Ctrl_Reg, 1			; If B_State is 0 -> Jump to Reset_Count
+	rjmp Reset_Count
+
+	rcall one_delay				; Wait 1s for button release
+	sbrs Ctrl_Reg, 1			; If B_State is 0 -> Jump to Tggl_Incr_Mode
+	rjmp Tggl_Incr_Mode
+B_Wait:							
+	rcall one_delay				; Wait 1s for button release
+	sbrs Ctrl_Reg, 1			; If B_State is 0 -> Jump to Clr_Ovrflw
+	rjmp Clr_Ovrflw
+	rjmp B_Wait					; Else -> Loop to wait longer
+Reset_Count:
+	sbr Ctrl_Reg, Reset_State	; Reset_State <- 1
+	ret
+Tggl_Incr_Mode:
+	sbr Ctrl_Reg, Incr_Mode		; Incr_Mode <- 1
+	rjmp Count_Stopped
+Clr_Ovrflw:
+	sbrc Ctrl_Reg, 5			; If Ovrflw is 1 -> (Ovrflw <- 0)
+	cbr Ctrl_Reg, Ovrflw
+	rjmp Count_Stopped
 
 
 ;===========| Incrementing Subroutines |=============
 
+; 10 second delay; calls one_delay 10 times (TODO: needs to early return if one_delay early returns)
+;Ten_Delay:
+;	ldi Ten_Decr, 10	; Ten_Decr <- 10
+;Next_Second:
+;	dec Ten_Decr		; r27 <- r27 - 1
+;	brne Next_Second	; If r27 is not 0 -> branch to Next_Second
+;	ret
+
 ; 1 second delay w/ button release check
-.equ count1 = 0x6969		; assign hex val for outer loop decrement (64000) TODO: dial these in to 1s
-.equ count2 = 0x69			; assign hex val for inner loop decrement (250)
+.equ count1 = 0x6969		; assign hex val for outer loop decrement TODO: dial these in to 1s
+.equ count2 = 0x69			; assign hex val for inner loop decrement (nice)
 one_delay:
-	ldi r26, low(count1)	; load count1 into outer loop counter (r27:r26)
-	ldi r27, high(count1)
+	ldi R26, low(count1)	; load count1 into outer loop counter (R27:R26)
+	ldi R27, high(count1)
 D1:
-	ldi r25, count2			; load count2 into inner loop counter (r25)
+	ldi R25, count2			; load count2 into inner loop counter (R25)
+
+	sbis PIND,6				; If A is pressed -> (A_State <- 1)
+	sbr Ctrl_Reg, A_State
+
+	sbrc Ctrl_Reg, 0		; If A_State is 1/Pressed -> Jump to Delay_A_Pressed
+	rjmp Delay_A_Pressed
+
+	sbrc Ctrl_Reg, 1		; If B_State is 1/Pressed -> Jump to Delay_B_Pressed
+	rjmp Delay_B_Pressed
 D2:
-	dec r25					; r25 <-- r25 - 1
-	brne D2					; If r24 is not 0 -> branch to D2
-	sbiw r27:r26, 1			; r27:r26 <-- r27:r26 - 1
-	brne D1					; if r26:r25 is not 0 -> branch to D1 
-	ret						; return
+	dec R25					; R25 <-- R25 - 1
+	brne D2					; If r25 is not 0 -> branch to D2
+	sbiw R27:R26, 1			; R27:R26 <-- R27:R26 - 1
+	brne D1					; if R27:R26 is not 0 -> branch to D1 
+	ret
+
+Delay_A_Pressed:
+	sbis PIND, 6			; If A is still pressed -> Jump to D2
+	rjmp D2
+	cbr Ctrl_Reg, A_State	; Else -> (A_State <- 0), (Run_State <- 0)
+	cbr Ctrl_Reg, Run_State
+	ret
+
+Delay_B_Pressed:
+	sbis PIND, 7			; If B is still pressed -> Jump to D2
+	rjmp D2
+	cbr Ctrl_Reg, B_State	; Else -> (B_State <- 0)
+	ret
 
 
 ;============| Display Digit Subroutine |============
 display:
 	; backup used registers on stack
-	push R16		; Push R16 to stack
-	push R17		; Push R17 to stack
-	in R17, SREG	; Input from SREG -> R17
-	push R17		; Push R17 to stack
-	ldi R17, 8		; loop --> test all 8 bits
+	push Disp_Queue			; Push Disp_Queue to stack
+	push Disp_Decr			; Push Disp_Decr to stack
+	in Disp_Decr, SREG		; Input from SREG -> Disp_Decr
+	push Disp_Decr			; Push Disp_Decr to stack
+	ldi Disp_Decr, 8		; loop -> test all 8 bits
 loop:
-	rol R16			; rotate left through Carry
-	BRCS set_ser	; branch if Carry is set
-	cbi PORTB,0		; clear SER (SER -> 0)
+	rol Disp_Queue			; rotate left through Carry
+	BRCS set_ser			; branch if Carry is set
+	cbi PORTB,0				; clear SER (SER -> 0)
 rjmp end
 set_ser:
-	sbi PORTB,0		; set SER (SER -> 1)
+	sbi PORTB,0				; set SER (SER -> 1)
 end:
 	; generate SRCLK pulse
-	sbi PORTB,2		; SRCLK on
-	nop				; pause to help circuit catch up
-	cbi PORTB,2     ; SRCLK off
-	dec R17
+	sbi PORTB,2				; SRCLK on
+	nop						; pause to help circuit catch up
+	cbi PORTB,2				; SRCLK off
+	dec Disp_Decr
 	brne loop
 	
 	; generate RCLK pulse
-	sbi PORTB,1     ; RCLK on
-	nop				; pause to help circuit catch up
-	cbi PORTB,1     ; RCLK off
+	sbi PORTB,1				; RCLK on
+	nop						; pause to help circuit catch up
+	cbi PORTB,1				; RCLK off
 
 	; restore registers from stack
-	pop R17
-	out SREG, R17
-	pop R17
-	pop R16
+	pop Disp_Decr
+	out SREG, Disp_Decr
+	pop Disp_Decr
+	pop Disp_Queue
 	ret
