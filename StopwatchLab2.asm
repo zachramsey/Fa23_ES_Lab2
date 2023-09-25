@@ -34,6 +34,8 @@ cbi DDRD,7	; Pushbutton B -> Board I/P: PD7
 .def Ctrl_Reg = R19		; Custom state register
 .def Digit_Buff = R20	; Data buffer for loading to Digit_Patterns
 .def Ten_Decr = R21		; Count of remaining calls to one_delay; decrements from 10
+.def Temp = R22			; Temporary register used to assist with converting a display pattern to the same pattern but with the tens mode light on
+
 
 ; Custom state register masks
 .equ A_State = 0b00000001		; bit 0: button A was pressed   (0:None    | 1:Pressed)
@@ -199,11 +201,11 @@ Tggl_Incr_Mode:
 	sbrc Ctrl_Reg, 5			; If Ovrflw is 1 -> Jump to Count_Stopped
 	rjmp Count_Stopped
 
-	ldi R22, Incr_Mode
-	eor Ctrl_Reg, R22			; Switch Increment Mode
+	ldi Temp, Incr_Mode
+	eor Ctrl_Reg, Temp			; Switch Increment Mode
 
-	ldi R22, 0x80
-	ADD Disp_Queue, R22
+	ldi Temp, 0x80
+	ADD Disp_Queue, Temp
 	rcall display				; Push to dispay
 
 	rjmp Count_Stopped
@@ -218,18 +220,16 @@ Clr_Ovrflw:
 
 ; calls one_delay 10 times (TODO: needs to early return if one_delay early returns)
 Ten_Delay:
-	ldi Ten_Decr, 10	; Ten_Decr <- 10
+	ldi Ten_Decr, 9	; Ten_Decr <- 10
 Next_Second:
 	rcall One_Delay		; Call the one delay and loop through 10 times to get 10 sec.
 	dec Ten_Decr		; r20 <- r20 - 1
 	brne Next_Second	; If r27 is not 0 -> branch to Next_Second
-	ret
+ret
 
 ; 1 second delay w/ button release check
-;.equ count1 = 0x6000		; assign hex val for outer loop decrement TODO: dial these in to 1s
-;.equ count2 = 0xE1			; assign hex val for inner loop decrement (nice)
-.equ count1 = 0x6969
-.equ count2 = 0x69
+.equ count1 = 0x5DFF		; assign hex val for outer loop decrement TODO: dial these in to 1s 0x6000
+.equ count2 = 0xE1			; assign hex val for inner loop decrement (nice)
 One_Delay:
 	ldi R26, low(count1)	; load count1 into outer loop counter (R27:R26)
 	ldi R27, high(count1)
