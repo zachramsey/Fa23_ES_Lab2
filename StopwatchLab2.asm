@@ -132,12 +132,14 @@ ret
 ; TODO: Implement overflow condition
 Count_Running:
 	sbrc Ctrl_Reg, 2				; If Incr_Mode is 1 -> call ten_delay subroutine
-	rcall Ten_Delay
+	rjmp Ten_Go
 	rcall One_Delay					; Else -> call one_delay subroutine
-
+	rjmp Continue_Running
+Ten_Go:
+	rcall Ten_Delay
+Continue_Running:
 	sbrs Ctrl_Reg, 3				; If Run_State is 0 -> return
 	ret
-
 	ld Disp_Queue, Z+				; Load next digit in table
 
 	sbrc Ctrl_Reg, 2				; If Incr_Mode is 1 -> Set DP bit
@@ -223,6 +225,10 @@ Ten_Delay:
 	ldi Ten_Decr, 9	; Ten_Decr <- 10
 Next_Second:
 	rcall One_Delay		; Call the one delay and loop through 10 times to get 10 sec.
+
+	sbrs Ctrl_Reg, 3
+	ret
+
 	dec Ten_Decr		; r20 <- r20 - 1
 	brne Next_Second	; If r27 is not 0 -> branch to Next_Second
 ret
